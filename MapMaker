@@ -1,0 +1,220 @@
+using UnityEngine;
+using System.Collections;
+using System;
+
+public class mapmaker : MonoBehaviour
+{
+    public PhysicMaterial bouncy;
+    public int width;
+    public int length;
+    public int maxheight;
+    public int smoothing;
+
+    public string seed;
+    public bool useRandomSeed;
+
+
+
+
+    double[,] map;
+
+
+    void Start()
+    {
+
+        GenerateMap();
+        MakeMesh();
+    }
+
+    void GenerateMap()
+    {
+        map = new double[width, length];
+        RandomHeight();
+
+
+        for (int i = 0; i < smoothing; i++)
+        {
+            SmoothMap();
+        }
+    }
+
+
+    void RandomHeight()
+    {
+        if (useRandomSeed)
+        {
+            seed = Time.time.ToString();
+        }
+
+        System.Random psuedoRandom = new System.Random(seed.GetHashCode());
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < length; y++)
+            {
+                map[x, y] = (psuedoRandom.NextDouble() * maxheight);
+            }
+        }
+    }
+
+    void SmoothMap()
+    {
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < length; y++)
+            {
+                double neighbourHeight = GetSurroundingHeight(x, y);
+
+                map[x, y] = (map[x, y] + neighbourHeight) / 2;
+
+
+            }
+        }
+    }
+    double GetSurroundingHeight(int gridX, int gridY)
+    {
+        double SurroundingHeight = 0;
+        int sides = 0;
+        for (int neighbourX = gridX - 1; neighbourX <= gridX + 1; neighbourX++)
+        {
+            for (int neighbourY = gridY - 1; neighbourY <= gridY + 1; neighbourY++)
+            {
+                if (neighbourX >= 0 && neighbourX < width && neighbourY >= 0 && neighbourY < length)
+                {
+                    if (neighbourX != gridX || neighbourY != gridY)
+                    {
+                        sides++;
+                        SurroundingHeight += map[neighbourX, neighbourY];
+                    }
+                }
+            }
+        }
+        SurroundingHeight = SurroundingHeight / sides;
+        return SurroundingHeight;
+    }
+
+    void OnDrawGizmos()
+
+
+    {
+        if (map != null)
+        {
+
+            /* 
+             Gizmos.color = Color.blue;
+             for (int x = 0; x < width;x ++)
+             {
+                 for (int y = 0; y < length; y++)
+                 {
+
+                     Vector3 pos = new Vector3(-width / 2 + x + .5f, map[x,y], -length / 2 + y + .5f);
+
+                         Gizmos.DrawCube(pos, Vector3.one);
+
+
+                 }
+             }
+             */
+        }
+
+    }
+
+    void MakeMesh()
+    {
+        MeshFilter mf = GetComponent<MeshFilter>();
+        Mesh mesh = new Mesh();
+        MeshCollider mc = GetComponent<MeshCollider>();
+        mf.mesh = mesh;
+       
+        
+
+        Vector3[] vertices = new Vector3[width * length];
+
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < length; y++)
+            {
+                vertices[(x * width) + y] = new Vector3(-width / 2 + x + .5f, (float)map[x, y], -length / 2 + y + .5f);
+
+            }
+        }
+
+        mesh.vertices = vertices;
+        int[] tri = new int[(width - 1) * 6 * (length - 1)];
+        int i = 0;
+        for (int x = 0; x < width - 1; x++)
+        {
+            for (int y = 0; y < length - 1; y++)
+            {
+                tri[6 * i] = y + 1 + ((x + 1) * width);
+                tri[(6 * i) + 1] = y + ((x + 1) * width);
+                tri[(6 * i) + 2] = y + (x * width);
+
+                tri[(6 * i) + 3] = y + (x * width);
+                tri[(6 * i) + 4] = y + (x * width) + 1;
+                tri[(6 * i) + 5] = y + ((x + 1) * width) + 1;
+
+
+                i++;
+
+
+            }
+        }
+        mesh.triangles = tri;
+
+        Vector3[,] trinormals = new Vector3[(width - 1) * 2 * (length - 1),2];
+        for (int x = 0; x < width - 1; x++)
+        {
+            for (int y = 0; y < length - 1; y++)
+            {
+                Vector3 v1 = vertices[y + 1 + ((x + 1) * width)];
+                Vector3 v2 = vertices[y + ((x + 1) * width)];
+                Vector3 v3 = vertices[y + (x * width)];
+                trinormals[y + x * width,0] = Vector3.Cross(v3 - v2, v1 - v2);
+                v1 = vertices[y + (x * width)];
+                v2 = vertices[y + 1 + (x * width)];
+                v3 = vertices[y + 1 + ((x + 1) * width)];
+                trinormals[y + x * width, 1] = Vector3.Cross(v3 - v2, v1 - v2);
+            }
+
+        }
+        
+        Vector3[] normals = new Vector3[width * length];
+        Vector3 average = new Vector3();
+        
+        for (int x = 0; x < width ; x++)
+        {
+            for (int y = 0; y < length ; y++)
+            {
+                average =  new Vector3(0f,0f,0f);
+                if ( x > 0 && y > 0)
+                {
+                    average += trinormals[((x - 1) * width) + y - 1, 0];
+                    average += trinormals[((x - 1) * width) + y - 1, 1];
+                }if (x > 0 && y < length)
+                {
+                    average += trinormals[((x - 1) * width) + y, 1];
+                }
+                if (y > 0 && x < length)
+                {
+                    average += trinormals[(x * width) + y - 1, 0];
+                }
+                if ( y < length && x < width)
+                {
+                    average += trinormals[(x * width) + y, 0];
+                    average += trinormals[(x * width) + y, 1];
+                }
+                normals[y + (x * width)] = average;
+                
+            }
+        }
+
+
+                mesh.normals = normals;
+        gameObject.AddComponent<MeshCollider>();
+        gameObject.GetComponent<MeshCollider>().material = bouncy;
+    }
+
+   
+}
